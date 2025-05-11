@@ -147,11 +147,11 @@ fn main() -> ! {
     // Take peripherals out of reset (IO_BANK0, PADS_BANK0)
     init_io(OUTPUT_PIN, INPUT_PIN);
 
-    // Enable falling edge interrupt on GPIO15 using the INTE register
-    write_reg(IO_BANK0_BASE + 0x104, 1 << 30); 
+    // Enable rising edge interrupt on GPIO15 using the INTE register
+    write_reg(IO_BANK0_BASE + 0x104, 1 << 31); 
     
-    // Clear any pending falling edge using the INTR register
-    write_reg(IO_BANK0_BASE + 0x0f4, 1 << 30);
+    // Clear any pending rising edge using the INTR register
+    write_reg(IO_BANK0_BASE + 0x0f4, 1 << 31);
 
     // Enable IO_BANK0 interrupt in NVIC (interrupt 13)
     write_reg(NVIC_ISER, 1 << 13);
@@ -172,12 +172,13 @@ fn main() -> ! {
 #[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn IO_IRQ_BANK0() {
+    // Check: Was this an interrupt from pin 15?
     let status = read_reg(IO_BANK0_BASE + 0x124);
-    if (status & (1 << 30)) != 0 {
+    if (status & (1 << 31)) != 0 {
         info!("LED Toggle");
         // Toggle the output pin
         write_reg(SIO_BASE + 0x1c, 1 << OUTPUT_PIN);
         // Clear the interrupt
-        write_reg(IO_BANK0_BASE + 0x0f4, 1 << 30); // Clear falling edge event
+        write_reg(IO_BANK0_BASE + 0x0f4, 1 << 31); // Clear falling edge event
     }
 }
