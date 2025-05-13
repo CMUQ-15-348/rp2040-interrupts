@@ -79,13 +79,13 @@ pub fn write_reg(addr: u32, value: u32) {
 
 pub fn set_bits(addr: u32, mask: u32) {
     unsafe {
-        write_volatile(addr as *mut u32, read_volatile(addr as *const u32) | mask);
+        write_volatile((addr + 0x2000) as *mut u32, mask);
     }
 }
 
 pub fn clear_bits(addr: u32, mask: u32) {
     unsafe {
-        write_volatile(addr as *mut u32, read_volatile(addr as *const u32) & !mask);
+        write_volatile((addr + 0x3000) as *mut u32, mask);
     }
 }
 
