@@ -1,8 +1,14 @@
+/* A simple demo for interrupt handling.
+ * Connect a push button switch between GPIO15 and power.
+ * (This program configures a pull down resistor for GPIO15.)
+ * Push the switch, the LED toggles.
+ * This program does not handle debouncing, so you may see some weirdness.
+ */
 #![no_main]
 #![no_std]
 
+use cortex_m;
 use cortex_m_rt::entry;
-//use cortex_m;
 use rp2040_boot2;
 
 use defmt::*;
@@ -11,49 +17,51 @@ use panic_probe as _;
 
 use core::ptr::{read_volatile, write_volatile};
 
+/* The stage 2 bootloader */
 #[link_section = ".boot2"]
 #[used]
 pub static BOOT2: [u8; 256] = rp2040_boot2::BOOT_LOADER_GENERIC_03H;
 
-pub union Vector {
-    handler: unsafe extern "C" fn(),
-    _reserved: usize,
-}
+/* The vector table. We don't have a good way to only change one handler, so
+ * we are defining the entire table. They are all the default handlers except
+ * for number 13, which is declared below.
+ * We declare the default handler as an extern below. The linker sets it up
+ * thanks to the device.x file.
+ */
+#[link_section = ".vector_table.interrupts"]
+#[no_mangle]
+pub static __INTERRUPTS: [unsafe extern "C" fn(); 26] = [
+    DefHandler,   //0
+    DefHandler,   //1
+    DefHandler,   //2
+    DefHandler,   //3
+    DefHandler,   //4
+    DefHandler,   //5
+    DefHandler,   //6
+    DefHandler,   //7
+    DefHandler,   //8
+    DefHandler,   //9
+    DefHandler,   //10
+    DefHandler,   //11
+    DefHandler,   //12
+    IO_IRQ_BANK0, //13
+    DefHandler,   //14
+    DefHandler,   //15
+    DefHandler,   //16
+    DefHandler,   //17
+    DefHandler,   //18
+    DefHandler,   //19
+    DefHandler,   //20
+    DefHandler,   //21
+    DefHandler,   //22
+    DefHandler,   //23
+    DefHandler,   //24
+    DefHandler,   //25
+];
 
 extern "C" {
     fn DefHandler();
 }
-
-#[link_section = ".vector_table.interrupts"]
-#[no_mangle]
-pub static __INTERRUPTS: [Vector; 26] = [
-    Vector { handler: DefHandler }, //0
-    Vector { handler: DefHandler }, //1
-    Vector { handler: DefHandler }, //2
-    Vector { handler: DefHandler }, //3
-    Vector { handler: DefHandler }, //4
-    Vector { handler: DefHandler }, //5
-    Vector { handler: DefHandler }, //6
-    Vector { handler: DefHandler }, //7
-    Vector { handler: DefHandler }, //8
-    Vector { handler: DefHandler }, //9
-    Vector { handler: DefHandler }, //10
-    Vector { handler: DefHandler }, //11 
-    Vector { handler: DefHandler }, //12
-    Vector { handler: IO_IRQ_BANK0 }, //13
-    Vector { handler: DefHandler }, //14
-    Vector { handler: DefHandler }, //15
-    Vector { handler: DefHandler }, //16
-    Vector { handler: DefHandler }, //17
-    Vector { handler: DefHandler }, //18
-    Vector { handler: DefHandler }, //19
-    Vector { handler: DefHandler }, //20
-    Vector { handler: DefHandler }, //21
-    Vector { handler: DefHandler }, //22
-    Vector { handler: DefHandler }, //23
-    Vector { handler: DefHandler }, //24
-    Vector { handler: DefHandler }  //25
-];
 
 /* Some helper functions to directly read/write registers.
  * The are unsafe because they dereference raw pointers.
@@ -136,7 +144,6 @@ fn init_io(output_pin: u32, input_pin: u32) {
     set_bits(PADS_BANK0_BASE + (input_pin + 1) * 4, 1 << 2);
     // Disable pullup
     clear_bits(PADS_BANK0_BASE + (input_pin + 1) * 4, 1 << 3);
-
 }
 
 const OUTPUT_PIN: u32 = 25;
@@ -148,8 +155,8 @@ fn main() -> ! {
     init_io(OUTPUT_PIN, INPUT_PIN);
 
     // Enable rising edge interrupt on GPIO15 using the INTE register
-    write_reg(IO_BANK0_BASE + 0x104, 1 << 31); 
-    
+    write_reg(IO_BANK0_BASE + 0x104, 1 << 31);
+
     // Clear any pending rising edge using the INTR register
     write_reg(IO_BANK0_BASE + 0x0f4, 1 << 31);
 
@@ -165,7 +172,7 @@ fn main() -> ! {
     // demo doesn't have anything to do.
     loop {
         cortex_m::asm::wfi();
-    }   
+    }
 }
 
 // Interrupt handler for IO_BANK0 (GPIO interrupts)

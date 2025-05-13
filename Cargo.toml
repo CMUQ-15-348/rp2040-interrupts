@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 cortex-m = { version = "0.7.7", features = ["critical-section-single-core"] }
 cortex-m-rt = { version = "0.7.5", features = ["device"] }
-embedded-hal = "1.0.0"
 rp2040-boot2 = "0.3.0"
 defmt = "1.0.1"
 defmt-rtt = "1.0.0"
