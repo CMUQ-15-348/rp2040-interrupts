@@ -7,7 +7,9 @@
 #![no_main]
 #![no_std]
 
+use core::cell::RefCell;
 use cortex_m;
+use cortex_m::interrupt::Mutex;
 use cortex_m_rt::entry;
 use rp2040_boot2;
 
@@ -127,8 +129,7 @@ fn init_io(output_pin: u32, input_pin: u32) {
     // The GPIO_OE_SET register is at offset 0x024.
     // We first need to enable the output driver for GPIO??.
     // See Table 16 and Table 25 in the datasheet for details
-    set_bits(SIO_BASE, 1 << output_pin);
-    set_bits(SIO_BASE + 0x024, 1 << output_pin);
+    write_reg(SIO_BASE + 0x024, 1 << output_pin);
 
     // Input pin: Pad configuration
     // Output disable on the pad
@@ -148,9 +149,16 @@ fn init_io(output_pin: u32, input_pin: u32) {
 
 const OUTPUT_PIN: u32 = 25;
 const INPUT_PIN: u32 = 15;
+// A shared integer that represents the number of interrupts which have occurred.
+static SHARED_DATA: Mutex<RefCell<Option<u32>>> = Mutex::new(RefCell::new(None));
 
 #[entry]
 fn main() -> ! {
+    // Initialize the shared data
+    cortex_m::interrupt::free(|cs| {
+        *SHARED_DATA.borrow(cs).borrow_mut() = Some(0);
+    });
+
     // Take peripherals out of reset (IO_BANK0, PADS_BANK0)
     init_io(OUTPUT_PIN, INPUT_PIN);
 
@@ -163,15 +171,25 @@ fn main() -> ! {
     // Enable IO_BANK0 interrupt in NVIC (interrupt 13)
     write_reg(NVIC_ISER, 1 << 13);
 
-    // Turn LED "off": Clear GPIO?? high. The GPIO_OUT_CLR register is at offset 0x018.
+    // Turn LED "on": Clear GPIO?? high. The GPIO_OUT_SET register is at offset 0x014.
     // See Table 16 and Table 21 in the datasheet for details
-    info!("LED off");
-    write_reg(SIO_BASE + 0x018, 1 << OUTPUT_PIN);
+    info!("LED on");
+    write_reg(SIO_BASE + 0x014, 1 << OUTPUT_PIN);
 
     // Main loop: Just wait for interrupts.  You could do other things here instead, but this
     // demo doesn't have anything to do.
     loop {
-        cortex_m::asm::wfi();
+        // If you don't need to do anything in the main loop, just use wfi to wait for interrupt.
+        //cortex_m::asm::wfi();
+
+        for i in 0..20000 {
+            cortex_m::asm::nop();
+        }
+        cortex_m::interrupt::free(|cs| {
+            if let Some(ref mut data) = *SHARED_DATA.borrow(cs).borrow_mut() {
+                info!("x is {}", *data);
+            }
+        });
     }
 }
 
@@ -182,7 +200,12 @@ pub extern "C" fn IO_IRQ_BANK0() {
     // Check: Was this an interrupt from pin 15?
     let status = read_reg(IO_BANK0_BASE + 0x124);
     if (status & (1 << 31)) != 0 {
-        info!("LED Toggle");
+        // increment the shared counter that represents the number of interrupts seen
+        cortex_m::interrupt::free(|cs| {
+            if let Some(ref mut data) = *SHARED_DATA.borrow(cs).borrow_mut() {
+                *data += 1;
+            }
+        });
         // Toggle the output pin
         write_reg(SIO_BASE + 0x1c, 1 << OUTPUT_PIN);
         // Clear the interrupt
